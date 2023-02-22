@@ -31,7 +31,8 @@ public class NativeAudioService : INativeAudioService
 
     public Task InitializeAsync(string audioURI)
     {
-        return InitializeAsync(new MediaContent() { URL=audioURI });
+        //return InitializeAsync(new MediaContent() { URL=audioURI });
+        return Task.CompletedTask;
     }
 
     public Task PauseAsync()
