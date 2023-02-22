@@ -27,7 +27,7 @@ public class NativeAudioService : INativeAudioService
 
     public async Task InitializeAsync(string audioURI)
     {
-        await InitializeAsync(new MediaPlay() { URL = audioURI });
+        await InitializeAsync(new MediaContent() { URL = audioURI });
     }
 
     public Task PauseAsync()
@@ -56,7 +56,7 @@ public class NativeAudioService : INativeAudioService
         return Task.CompletedTask;
     }
 
-    public async Task InitializeAsync(MediaPlay media)
+    public async Task InitializeAsync(MediaContent media)
     {
 
         if (avPlayer != null)

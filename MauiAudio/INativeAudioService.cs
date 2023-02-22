@@ -3,7 +3,7 @@
 public interface INativeAudioService
 {
     Task InitializeAsync(string audioURI);
-    Task InitializeAsync(MediaPlay media);
+    Task InitializeAsync(MediaContent media);
     Task PlayAsync(double position = 0);
 
     Task PauseAsync();

@@ -52,7 +52,7 @@ public class MediaPlayerService : Service,
     public event EventHandler TaskPlayNext;
     public event EventHandler TaskPlayPrevious;
 
-    public MediaPlay mediaPlay;
+    public MediaContent mediaPlay;
 
     public bool isCurrentEpisode = true;
 
