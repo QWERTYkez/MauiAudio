@@ -1,46 +1,45 @@
-﻿namespace MauiAudio;
+﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
 
-public interface INativeAudioService
+namespace MauiAudio
 {
-    Task InitializeAsync(string audioURI);
-    Task InitializeAsync(MediaContent media);
-    Task PlayAsync(double position = 0);
+    public interface INativeAudioService : INotifyPropertyChanged, IDisposable
+    {
+        public event EventHandler PlayingStarted;
+        public event EventHandler PlayingPaused;
+        public event EventHandler PlayingEnded;
+        public event EventHandler<MediaContent> PreviousMediaAccepted;
+        public event EventHandler<MediaContent> NextMediaAccepted;
+        public event EventHandler<TimeSpan> DurationAccepted;
+        public event EventHandler<double> BuffCoeffAccepted;
 
-    Task PauseAsync();
-    ///<Summary>
-    /// Set the current playback position (in seconds).
-    ///</Summary>
-    Task SetCurrentTime(double value);
+        public ObservableCollection<MediaContent> Playlist { get; }
 
-    Task DisposeAsync();
-    ///<Summary>
-    /// Gets a value indicating whether the currently loaded audio file is playing.
-    ///</Summary>
-    bool IsPlaying { get; }
-    ///<Summary>
-    /// Gets the current position of audio playback in seconds.
-    ///</Summary>
-    double CurrentPosition { get; }
-    ///<Summary>
-    /// Gets the length of audio in seconds.
-    ///</Summary>
-    double Duration { get; }
-    ///<Summary>
-    /// Gets or sets the playback volume 0 to 1 where 0 is no-sound and 1 is full volume.
-    ///</Summary>
-    double Volume { get; set; }
-    /// <summary>
-    /// Gets or sets the playback volume muted. false means not mute; true means mute.
-    /// </summary>
-    bool Muted { get; set; }
+        public MediaContent MediaPrevious { get; }
+        public MediaContent MediaCurrent { get; }
+        public MediaContent MediaNext { get; }
 
-    ///<Summary>
-    /// Gets or sets the balance left/right: -1 is 100% left : 0% right, 1 is 100% right : 0% left, 0 is equal volume left/right.
-    ///</Summary>
-    double Balance { get; set; }
+        public double Volume { get; set; }
+        public double Balance { get; set; }
+        public bool Muted { get; set; }
 
-    event EventHandler<bool> IsPlayingChanged;
-    event EventHandler PlayEnded;
-    event EventHandler PlayNext;
-    event EventHandler PlayPrevious;
+        public abstract bool IsPlaying { get; }
+        public abstract double BufferedCoeff { get; }
+        public abstract TimeSpan Duration { get; }
+        public abstract bool TryGetPosition(out TimeSpan position);
+
+        public bool LaunchPlaylist<T>(List<T> playlist, MediaContent currentMedia, TimeSpan? position = null) where T : MediaContent;
+        public bool LaunchPlaylist(List<MediaContent> playlist, MediaContent currentMedia, TimeSpan? position = null);
+        public bool LaunchMedia(MediaContent media, TimeSpan? position = null);
+
+        public abstract void Play();
+        public abstract void Pause();
+        public abstract void Stop();
+        public abstract void SeekTo(TimeSpan position);
+        public abstract void Next();
+        public abstract void Previous();
+
+        public bool Shuffled { get; set; }
+        public abstract bool LoopMedia { get; set; }
+    }
 }

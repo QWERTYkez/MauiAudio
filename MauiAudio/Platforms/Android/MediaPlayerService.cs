@@ -1,12 +1,12 @@
 ﻿using Android.App;
 using Android.Content;
+using Android.Graphics;
 using Android.Media;
+using Android.Media.Session;
 using Android.Net;
 using Android.Net.Wifi;
 using Android.OS;
-using Android.Media.Session;
 using AndroidNet = Android.Net;
-using Android.Graphics;
 
 namespace MauiAudio.Platforms.Android;
 
@@ -37,22 +37,52 @@ public class MediaPlayerService : Service,
     private WifiManager wifiManager;
     private WifiManager.WifiLock wifiLock;
 
-    public event StatusChangedEventHandler StatusChanged;
+    public event EventHandler PlayingStarted;
+    public event EventHandler PlayingPaused;
+    public event EventHandler PlayingEnded;
+    public event EventHandler<MediaContent> PreviousMediaAccepted;
+    public event EventHandler<MediaContent> CurrentMediaAccepted;
+    public event EventHandler<MediaContent> NextMediaAccepted;
+    public event EventHandler<TimeSpan> DurationAccepted;
+    public event EventHandler<double> BuffCoeffAccepted;
 
-    public event CoverReloadedEventHandler CoverReloaded;
 
-    public event PlayingEventHandler Playing;
+    private void OnPlayingStarted()
+    {
+        PlayingStarted?.Invoke(this, EventArgs.Empty);
+    }
+    private void OnPlayingPaused()
+    {
+        PlayingPaused?.Invoke(this, EventArgs.Empty);
+    }
+    public async void OnCompletion(MediaPlayer mp)
+    {
+        PlayingEnded?.Invoke(this, EventArgs.Empty);
+        await PlayNext();
+    }
+    public void OnPreviousMediaAccepted()
+    {
+        PreviousMediaAccepted?.Invoke(this, MediaPrevious);
+    }
+    public void OnNextMediaAccepted()
+    {
+        NextMediaAccepted?.Invoke(this, MediaNext);
+    }
+    public void OnDurationAccepted(TimeSpan duration)
+    {
+        DurationAccepted?.Invoke(this, duration);
+    }
+    public void OnBufferingUpdate(MediaPlayer mp, int percent)
+    {
+        _buffered = (double)percent / 100;
+        BuffCoeffAccepted?.Invoke(this, _buffered);
+    }
 
-    public event BufferingEventHandler Buffering;
+    public bool LoopMedia { get; set; }
 
-    public event PlayingChangedEventHandler PlayingChanged;
-
-    public event EventHandler<bool> IsPlayingChanged;
-    public event EventHandler TaskPlayEnded;
-    public event EventHandler TaskPlayNext;
-    public event EventHandler TaskPlayPrevious;
-
-    public MediaContent mediaPlay;
+    public MediaContent MediaPrevious;
+    public MediaContent MediaCurrent;
+    public MediaContent MediaNext;
 
     public bool isCurrentEpisode = true;
 
@@ -78,53 +108,11 @@ public class MediaPlayerService : Service,
         // Create a runnable, restarting itself if the status still is "playing"
         PlayingHandlerRunnable = new Java.Lang.Runnable(() =>
         {
-            OnPlaying(EventArgs.Empty);
-
             if (MediaPlayerState == PlaybackStateCode.Playing)
             {
                 PlayingHandler.PostDelayed(PlayingHandlerRunnable, 250);
             }
         });
-
-        // On Status changed to PLAYING, start raising the Playing event
-        StatusChanged += (sender, e) =>
-        {
-            if (MediaPlayerState == PlaybackStateCode.Playing)
-            {
-                PlayingHandler.PostDelayed(PlayingHandlerRunnable, 0);
-            }
-        };
-    }
-
-    protected virtual void OnStatusChanged(EventArgs e)
-    {
-        StatusChanged?.Invoke(this, e);
-    }
-
-    protected virtual void OnPlayingChanged(bool e)
-    {
-        PlayingChanged?.Invoke(this, e);
-        IsPlayingChanged?.Invoke(this,e);
-    }
-
-    protected virtual void OnCoverReloaded(EventArgs e)
-    {
-        if (CoverReloaded != null)
-        {
-            CoverReloaded(this, e);
-            StartNotification();
-            UpdateMediaMetadataCompat();
-        }
-    }
-
-    protected virtual void OnPlaying(EventArgs e)
-    {
-        Playing?.Invoke(this, e);
-    }
-
-    protected virtual void OnBuffering(EventArgs e)
-    {
-        Buffering?.Invoke(this, e);
     }
 
     /// <summary>
@@ -149,7 +137,7 @@ public class MediaPlayerService : Service,
         {
             if (mediaSession == null)
             {
-                Intent nIntent = new Intent(ApplicationContext, typeof(Activity));
+                Intent nIntent = new(ApplicationContext, typeof(Activity));
 
                 remoteComponentName = new ComponentName(PackageName, new RemoteControlBroadcastReceiver().ComponentName);
 
@@ -190,26 +178,6 @@ public class MediaPlayerService : Service,
         mediaPlayer.SetOnPreparedListener(this);
     }
 
-
-    public void OnBufferingUpdate(MediaPlayer mp, int percent)
-    {
-        int duration = 0;
-        if (MediaPlayerState == PlaybackStateCode.Playing || MediaPlayerState == PlaybackStateCode.Paused)
-            duration = mp.Duration;
-
-        int newBufferedTime = duration * percent / 100;
-        if (newBufferedTime != Buffered)
-        {
-            Buffered = newBufferedTime;
-        }
-    }
-
-    public async void OnCompletion(MediaPlayer mp)
-    {
-        TaskPlayEnded?.Invoke(this, EventArgs.Empty);
-        await PlayNext();
-    }
-
     public bool OnError(MediaPlayer mp, MediaError what, int extra)
     {
         UpdatePlaybackState(PlaybackStateCode.Error);
@@ -218,51 +186,61 @@ public class MediaPlayerService : Service,
 
     public void OnPrepared(MediaPlayer mp)
     {
+        OnDurationAccepted(TimeSpan.FromMilliseconds(mp.Duration));
         mp.Start();
         UpdatePlaybackState(PlaybackStateCode.Playing);
     }
 
-    public int Position
+    public TimeSpan? Position
     {
         get
         {
             if (mediaPlayer == null
                 || MediaPlayerState != PlaybackStateCode.Playing
                     && MediaPlayerState != PlaybackStateCode.Paused)
-                return -1;
+                return null;
             else
-                return mediaPlayer.CurrentPosition;
+                return TimeSpan.FromMilliseconds(mediaPlayer.CurrentPosition);
         }
     }
 
-    public int Duration
+    public bool IsPlaying
+    {
+        get
+        {
+            if (mediaPlayer == null)
+                return mediaPlayer.IsPlaying;
+            else
+                return false;
+        }
+    }
+
+    public TimeSpan Duration
     {
         get
         {
             if (mediaPlayer == null
                 || MediaPlayerState != PlaybackStateCode.Playing
                     && MediaPlayerState != PlaybackStateCode.Paused)
-                return 0;
+                return TimeSpan.Zero;
             else
-                return mediaPlayer.Duration;
+                return TimeSpan.FromMilliseconds(mediaPlayer.Duration);
         }
     }
 
-    private int buffered = 0;
-
-    public int Buffered
+    private double _buffered = 0;
+    public double Buffered
     {
         get
         {
             if (mediaPlayer == null)
                 return 0;
             else
-                return buffered;
+                return _buffered;
         }
         private set
         {
-            buffered = value;
-            OnBuffering(EventArgs.Empty);
+            _buffered = value;
         }
     }
 
@@ -270,18 +248,58 @@ public class MediaPlayerService : Service,
 
     public object Cover
     {
-        get
-        {
-            if (cover == null)
-                cover = BitmapFactory.DecodeResource(Resources, Resource.Drawable.music); //TODO player_play
-            return cover;
-        }
+        get => cover ??= BitmapFactory.DecodeResource(Resources, Resource.Drawable.music); //TODO player_play
         set
         {
             cover = value as Bitmap;
-            if(cover!=null)
-            OnCoverReloaded(EventArgs.Empty);
+            if (cover != null)
+            {
+                StartNotification();
+                UpdateMediaMetadataCompat();
+            }
         }
+    }
+
+    private double _volume;
+    public double Volume
+    {
+        get => _volume;
+        set
+        {
+            _volume = value;
+            ResetVolume();
+        }
+    }
+    private double _balance;
+    public double Balance
+    {
+        get => _balance;
+        set
+        {
+            _balance = value;
+            ResetVolume();
+        }
+    }
+    private bool _muted;
+    public bool Muted
+    {
+        get => _muted;
+        set
+        {
+            _muted = value;
+            if (value)
+                mediaPlayer.SetVolume(0, 0);
+            else
+                ResetVolume();
+        }
+    }
+    private void ResetVolume()
+    {
+        // Using the "constant power pan rule." See: http://www.rs-met.com/documents/tutorials/PanRules.pdf
+        var left = Math.Cos((Math.PI * (_balance + 1)) / 4) * _volume;
+        var right = Math.Sin((Math.PI * (_balance + 1)) / 4) * _volume;
+
+        mediaPlayer?.SetVolume((float)left, (float)right);
     }
 
     /// <summary>
@@ -289,178 +307,180 @@ public class MediaPlayerService : Service,
     /// </summary>
     public async Task Play()
     {
-        if (mediaPlayer != null && MediaPlayerState == PlaybackStateCode.Paused)
-        {
-            //We are simply paused so just start again
-            mediaPlayer.Start();
-            UpdatePlaybackState(PlaybackStateCode.Playing);
-            StartNotification();
-
-            //Update the metadata now that we are playing
-            UpdateMediaMetadataCompat();
-            return;
-        }
-
-        if (mediaPlayer == null)
-            InitializePlayer();
-
         if (mediaSession == null)
             InitMediaSession();
 
-        if (mediaPlayer.IsPlaying && isCurrentEpisode)
+        if (mediaPlayer == null)
         {
-            UpdatePlaybackState(PlaybackStateCode.Playing);
-            return;
+            InitializePlayer();
+        }
+        else
+        {
+            if (mediaPlayer.IsPlaying && isCurrentEpisode)
+            {
+                UpdatePlaybackState(PlaybackStateCode.Playing);
+                return;
+            }
+            if (MediaPlayerState == PlaybackStateCode.Paused)
+            {
+                //We are simply paused so just start again
+                mediaPlayer.Start();
+                UpdatePlaybackState(PlaybackStateCode.Playing);
+                StartNotification();
+
+                //Update the metadata now that we are playing
+                UpdateMediaMetadataCompat();
+                return;
+            }
         }
 
         isCurrentEpisode = true;
 
-        await PrepareAndPlayMediaPlayerAsync();
-    }
-
-    private async Task PrepareAndPlayMediaPlayerAsync()
-    {
-        try
+        //PrepareAndPlayMediaPlayerAsync
         {
-            if (OperatingSystem.IsAndroidVersionAtLeast(21))
+            try
             {
-                MediaMetadataRetriever metaRetriever = new MediaMetadataRetriever();
-
-                AndroidNet.Uri uri;
-                if(mediaPlay.Stream!= null)
+                if (OperatingSystem.IsAndroidVersionAtLeast(21))
                 {
-                    var fileStream = File.Create(FileSystem.Current.CacheDirectory+"temp.wav");
-                    mediaPlay.Stream.CopyTo(fileStream);
-                    fileStream.Close();
-                    uri = AndroidNet.Uri.Parse( FileSystem.Current.CacheDirectory + "temp.wav");
-                }
-                else
-                {
-                    uri = AndroidNet.Uri.Parse(mediaPlay.URL);
-                }
-				await mediaPlayer.SetDataSourceAsync(ApplicationContext, uri);
+                    MediaMetadataRetriever metaRetriever = new();
 
-                //If Uri Scheme is not set its a local file so there's no metadata to fetch
-                if (!string.IsNullOrWhiteSpace(uri.Scheme))
-                    await metaRetriever.SetDataSourceAsync(uri.ToString(), new Dictionary<string, string>());
-
-                if (OperatingSystem.IsAndroidVersionAtLeast(26))
-                {
-                    var focusResult = audioManager.RequestAudioFocus(new AudioFocusRequestClass
-                   .Builder(AudioFocus.Gain)
-                   .SetOnAudioFocusChangeListener(this)
-                   .Build());
-
-                    if (focusResult != AudioFocusRequest.Granted)
+                    AndroidNet.Uri uri;
+                    if (MediaCurrent.Stream != null)
                     {
-                        // Could not get audio focus
-                        Console.WriteLine("Could not get audio focus");
+                        var fileStream = File.Create(FileSystem.Current.CacheDirectory + "temp.wav");
+                        MediaCurrent.Stream.CopyTo(fileStream);
+                        fileStream.Close();
+                        uri = AndroidNet.Uri.Parse(FileSystem.Current.CacheDirectory + "temp.wav");
                     }
-                }
-                UpdatePlaybackState(PlaybackStateCode.Buffering);
-                mediaPlayer.PrepareAsync();
+                    else
+                    {
+                        uri = AndroidNet.Uri.Parse(MediaCurrent.URL);
+                    }
+                    await mediaPlayer.SetDataSourceAsync(ApplicationContext, uri);
 
-                AquireWifiLock();
+                    //If Uri Scheme is not set its a local file so there's no metadata to fetch
+                    if (!string.IsNullOrWhiteSpace(uri.Scheme))
+                        await metaRetriever.SetDataSourceAsync(uri.ToString(), new Dictionary<string, string>());
 
-                //Check if there's some metadata
-                if (!string.IsNullOrEmpty(mediaPlay.Image))
-                {
-                    Cover = await GetImageBitmapFromUrl(mediaPlay.Image);
+                    if (OperatingSystem.IsAndroidVersionAtLeast(26))
+                    {
+                        var focusResult = audioManager.RequestAudioFocus(new AudioFocusRequestClass
+                       .Builder(AudioFocus.Gain)
+                       .SetOnAudioFocusChangeListener(this)
+                       .Build());
+
+                        if (focusResult != AudioFocusRequest.Granted)
+                        {
+                            // Could not get audio focus
+                            Console.WriteLine("Could not get audio focus");
+                        }
+                    }
+                    UpdatePlaybackState(PlaybackStateCode.Buffering);
+                    mediaPlayer.PrepareAsync();
+
+                    AquireWifiLock();
+
+                    //Check if there's some metadata
+                    if (!string.IsNullOrEmpty(MediaCurrent.Image))
+                    {
+                        using var webClient = new HttpClient();
+                        var imageBytes = await webClient.GetByteArrayAsync(MediaCurrent.Image);
+                        if (imageBytes != null && imageBytes.Length > 0)
+                        {
+                            Cover = BitmapFactory.DecodeByteArray(imageBytes, 0, imageBytes.Length);
+                        }
+                    }
+                    else if (metaRetriever != null && !string.IsNullOrWhiteSpace(metaRetriever.ExtractMetadata(MetadataKey.Album)))
+                    {
+                        byte[] imageByteArray = metaRetriever.GetEmbeddedPicture();
+                        //if (imageByteArray == null)
+                        //    Cover = await BitmapFactory.DecodeResourceAsync(Resources, Resource.Drawable.abc_ab_share_pack_mtrl_alpha); //TODO player_play
+                        //else
+                        if (imageByteArray != null)
+                            Cover = await BitmapFactory.DecodeByteArrayAsync(imageByteArray, 0, imageByteArray.Length);
+                    }
+                    UpdateMediaMetadataCompat(metaRetriever);
+                    StartNotification();
                 }
-                else if (metaRetriever != null && !string.IsNullOrWhiteSpace(metaRetriever.ExtractMetadata(MetadataKey.Album)))
-                {
-                    byte[] imageByteArray = metaRetriever.GetEmbeddedPicture();
-                    //if (imageByteArray == null)
-                    //    Cover = await BitmapFactory.DecodeResourceAsync(Resources, Resource.Drawable.abc_ab_share_pack_mtrl_alpha); //TODO player_play
-                    //else
-                    if (imageByteArray != null)
-                        Cover = await BitmapFactory.DecodeByteArrayAsync(imageByteArray, 0, imageByteArray.Length);
-                }
-                UpdateMediaMetadataCompat(metaRetriever);
-                StartNotification();
             }
-        }
-        catch (Exception ex)
-        {
-            UpdatePlaybackStateStopped();
-
-            // Unable to start playback log error
-            Console.WriteLine(ex);
-        }
-    }
-    private async Task<Bitmap> GetImageBitmapFromUrl(string url)
-    {
-        Bitmap imageBitmap = null;
-
-        using (var webClient = new HttpClient())
-        {
-            var imageBytes = await webClient.GetByteArrayAsync(url);
-            if (imageBytes != null && imageBytes.Length > 0)
+            catch (Exception ex)
             {
-                imageBitmap = BitmapFactory.DecodeByteArray(imageBytes, 0, imageBytes.Length);
+                UpdatePlaybackStateStopped();
+
+                // Unable to start playback log error
+                Console.WriteLine(ex);
             }
         }
-
-        return imageBitmap;
     }
-    public async Task Seek(int position)
+
+    public async Task SeekTo(TimeSpan position)
     {
-        await Task.Run(() =>
+        await Task.Run(() => mediaPlayer?.SeekTo((int)position.TotalMilliseconds));
+    }
+
+    public async Task PlayNext(bool Manually = false)
+    {
+        if (mediaPlayer != null)
         {
-            if (mediaPlayer != null)
+            if (!Manually && LoopMedia)
             {
-                mediaPlayer.SeekTo(position);
+                await SeekTo(TimeSpan.Zero);
+                await Play();
             }
-        });
-    }
+            else if (MediaNext != null)
+            {
+                mediaPlayer.Reset();
 
-    public async Task PlayNext()
-    {
-        TaskPlayNext?.Invoke(this,EventArgs.Empty);
-        //if (mediaPlayer != null)
-        //{
-        //    mediaPlayer.Reset();
-        //    mediaPlayer.Release();
-        //    mediaPlayer = null;
-        //}
+                MediaCurrent = MediaNext;
+                OnNextMediaAccepted();
 
-        UpdatePlaybackState(PlaybackStateCode.SkippingToNext);
+                UpdatePlaybackState(PlaybackStateCode.SkippingToNext);
 
-        //await Play();
-    }
-
-    public async Task PlayPrevious()
-    {
-        // Start current track from beginning if it's the first track or the track has played more than 3sec and you hit "playPrevious".
-        TaskPlayPrevious?.Invoke(this, EventArgs.Empty);
-        //if (Position > 3000)
-        //{
-        //    await Seek(0);
-        //}
-        //else
-        //{
-        //    if (mediaPlayer != null)
-        //    {
-        //        mediaPlayer.Reset();
-        //        mediaPlayer.Release();
-        //        mediaPlayer = null;
-        //    }
-
-        UpdatePlaybackState(PlaybackStateCode.SkippingToPrevious);
-
-        //    await Play();
-        //}
-    }
-
-    public async Task PlayPause()
-    {
-        if (mediaPlayer == null || mediaPlayer != null && MediaPlayerState == PlaybackStateCode.Paused)
+                await Play();
+            }
+        }
+        else if (MediaNext != null)
         {
+            MediaCurrent = MediaNext;
             await Play();
         }
-        else
+    }
+
+    private readonly TimeSpan sec3 = TimeSpan.FromSeconds(3);
+    public async Task PlayPrevious(bool Manually = false)
+    {
+        if (mediaPlayer != null)
         {
-            await Pause();
+            // Start current track from beginning if it's the first track or the track has played more than 3sec and you hit "playPrevious".
+            if (Position > sec3)
+            {
+                await SeekTo(TimeSpan.Zero);
+                await Play();
+            }
+            else
+            {
+                if (!Manually && LoopMedia)
+                {
+                    await SeekTo(TimeSpan.Zero);
+                    await Play();
+                }
+                else if (MediaPrevious != null)
+                {
+                    mediaPlayer.Reset();
+
+                    MediaCurrent = MediaPrevious;
+                    OnPreviousMediaAccepted();
+
+                    UpdatePlaybackState(PlaybackStateCode.SkippingToPrevious);
+
+                    await Play();
+                }
+            }
+        }
+        else if (MediaPrevious != null)
+        {
+            MediaCurrent = MediaPrevious;
+            await Play();
         }
     }
 
@@ -518,6 +538,12 @@ public class MediaPlayerService : Service,
 
         try
         {
+            int pos = 0;
+            if (Position != null)
+            {
+                pos = (int)Position.Value.TotalMilliseconds;
+            }
+
             PlaybackState.Builder stateBuilder = new PlaybackState.Builder()
                 .SetActions(
                     PlaybackState.ActionPause |
@@ -527,13 +553,16 @@ public class MediaPlayerService : Service,
                     PlaybackState.ActionSkipToPrevious |
                     PlaybackState.ActionStop
                 )
-                .SetState(state, Position, 1.0f, SystemClock.ElapsedRealtime());
+                .SetState(state, pos, 1.0f, SystemClock.ElapsedRealtime());
 
             mediaSession.SetPlaybackState(stateBuilder.Build());
 
-            OnStatusChanged(EventArgs.Empty);
-
-            if (state == PlaybackStateCode.Playing || state == PlaybackStateCode.Paused)
+            if (state == PlaybackStateCode.Playing)
+            {
+                PlayingHandler.PostDelayed(PlayingHandlerRunnable, 0);
+                StartNotification();
+            }
+            else if (state == PlaybackStateCode.Paused)
             {
                 StartNotification();
             }
@@ -565,14 +594,14 @@ public class MediaPlayerService : Service,
         if (mediaSession == null)
             return;
 
-        MediaMetadata.Builder builder = new MediaMetadata.Builder();
+        MediaMetadata.Builder builder = new();
 
         if (metaRetriever != null)
         {
             builder
             .PutString(MediaMetadata.MetadataKeyAlbum,metaRetriever.ExtractMetadata(MetadataKey.Album))
-            .PutString(MediaMetadata.MetadataKeyArtist, mediaPlay.Author ?? metaRetriever.ExtractMetadata(MetadataKey.Artist))
-            .PutString(MediaMetadata.MetadataKeyTitle, mediaPlay.Name ?? metaRetriever.ExtractMetadata(MetadataKey.Title));
+            .PutString(MediaMetadata.MetadataKeyArtist, MediaCurrent.Author ?? metaRetriever.ExtractMetadata(MetadataKey.Artist))
+            .PutString(MediaMetadata.MetadataKeyTitle, MediaCurrent.Name ?? metaRetriever.ExtractMetadata(MetadataKey.Title));
         }
         else
         {
@@ -626,10 +655,7 @@ public class MediaPlayerService : Service,
     /// </summary>
     private void AquireWifiLock()
     {
-        if (wifiLock == null)
-        {
-            wifiLock = wifiManager.CreateWifiLock(WifiMode.Full, "xamarin_wifi_lock");
-        }
+        wifiLock ??= wifiManager.CreateWifiLock(WifiMode.Full, "xamarin_wifi_lock");
         wifiLock.Acquire();
     }
 
@@ -732,15 +758,15 @@ public class MediaPlayerService : Service,
             mediaPlayerService = service;
         }
 
-        public override async void OnPause()
+        public override void OnPause()
         {
-            mediaPlayerService.GetMediaPlayerService().OnPlayingChanged(false);
+            mediaPlayerService.GetMediaPlayerService().OnPlayingPaused();
             base.OnPause();
         }
 
-        public override async void OnPlay()
+        public override void OnPlay()
         {
-            mediaPlayerService.GetMediaPlayerService().OnPlayingChanged(true);
+            mediaPlayerService.GetMediaPlayerService().OnPlayingStarted();
             base.OnPlay();
         }
 

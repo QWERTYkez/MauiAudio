@@ -4,12 +4,9 @@
     {
         public MediaPlayerServiceBinder Binder { get; set; }
 
-        public event StatusChangedEventHandler StatusChanged;
-
-        public event CoverReloadedEventHandler CoverReloaded;
-
-        public event PlayingEventHandler Playing;
-
-        public event BufferingEventHandler Buffering;
+        public event EventHandler StatusChanged;
+        public event EventHandler CoverReloaded;
+        public event EventHandler Playing;
+        public event EventHandler Buffering;
     }
 }

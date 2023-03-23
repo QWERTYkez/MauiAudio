@@ -1,75 +1,75 @@
-﻿using Windows.Media.Core;
+﻿using Windows.Media;
+using Windows.Media.Core;
 using Windows.Media.Playback;
-using Windows.Media;
 using Windows.Storage.Streams;
+
 namespace MauiAudio;
 
-public class NativeAudioService : INativeAudioService
+public class NativeAudioService : NativeAudioServiceBase
 {
-    MediaPlayer mediaPlayer;
+    MediaPlayer MediaPlayer;
 
-    public bool IsPlaying => mediaPlayer != null
-        && mediaPlayer.CurrentState == MediaPlayerState.Playing;
-    public double Duration => mediaPlayer?.NaturalDuration.TotalSeconds ?? 0;
-    public double CurrentPosition => mediaPlayer?.Position.TotalSeconds ?? 0;
-
-    public double Volume
+    private bool Buffering = false;
+    private protected override void Initialize()
     {
-        get => mediaPlayer?.Volume ?? 0;
+        MediaPlayer = new();
 
+        MediaPlayer.CommandManager.PlayReceived += (s, e) => Play();
+        MediaPlayer.CommandManager.PauseReceived += (s, e) => Pause();
+        MediaPlayer.CommandManager.PreviousReceived += (s, e) => Previous();
+        MediaPlayer.CommandManager.NextReceived += (s, e) => Next();
 
-        set => mediaPlayer.Volume = Math.Clamp(value, 0, 1);
-    }
-    public bool Muted
-    {
-        get => mediaPlayer?.IsMuted ?? false;
-        set => mediaPlayer.IsMuted = value;
-    }
-    public double Balance { get => mediaPlayer.AudioBalance; set => mediaPlayer.AudioBalance = Math.Clamp(value, -1, 1); }
-
-    public event EventHandler<bool> IsPlayingChanged;
-    public event EventHandler PlayEnded;
-    public event EventHandler PlayNext;
-    public event EventHandler PlayPrevious;
-
-    public async Task InitializeAsync(string audioURI)
-    {
-        //await InitializeAsync(new MediaContent() { URL = audioURI });
-    }
-
-    public Task PauseAsync()
-    {
-        mediaPlayer?.Pause();
-        return Task.CompletedTask;
-    }
-
-    public Task PlayAsync(double position = 0)
-    {
-        if (mediaPlayer != null)
+        MediaPlayer.BufferingStarted += (s, e) =>
         {
-            mediaPlayer.Position = TimeSpan.FromSeconds(position);
-            mediaPlayer.Play();
-        }
-
-        return Task.CompletedTask;
-    }
-
-    public Task SetCurrentTime(double value)
-    {
-        if (mediaPlayer != null)
+            Task.Run(async () =>
+            {
+                Buffering = true;
+                while (Buffering)
+                {
+                    OnBuffCoeffAccepted(BufferedCoeff);
+                    await Task.Delay(500);
+                }
+            });
+        };
+        MediaPlayer.BufferingEnded += (s, e) =>
         {
-            mediaPlayer.Position = TimeSpan.FromSeconds(value);
+            Buffering = false;
+            OnBuffCoeffAccepted(1);
+        };
+        MediaPlayer.MediaOpened += (s, e) => OnDurationAccepted(Duration);
+        MediaPlayer.MediaEnded += (s, e) => OnPlayingEnded(null);
+    }
+
+
+    public override bool LoopMedia { get; set; }
+    public override bool IsPlaying => MediaPlayer != null && MediaPlayer.CurrentState == MediaPlayerState.Playing;
+    public override double BufferedCoeff => MediaPlayer.BufferingProgress / 100;
+    public override TimeSpan Duration => MediaPlayer?.NaturalDuration ?? TimeSpan.Zero;
+    public override bool TryGetPosition(out TimeSpan position)
+    {
+        if (MediaPlayer != null)
+        {
+            position = MediaPlayer.Position;
+            return true;
         }
-        return Task.CompletedTask;
+        else
+        {
+            position = TimeSpan.Zero;
+            return false;
+        }
     }
-    public Task DisposeAsync()
+
+
+    private protected override void SetVolume(double value) => MediaPlayer.Volume = value;
+    private protected override void SetBalance(double value) => MediaPlayer.AudioBalance = value;
+    private protected override void SetMuted(bool value) => MediaPlayer.IsMuted = value;
+
+
+    private protected override void PrepareToStartNew(MediaContent media)
     {
-        mediaPlayer?.Dispose();
-        return Task.CompletedTask;
-    }
-    private MediaPlaybackItem mediaPlaybackItem(MediaContent media)
-    {
-        var mediaItem = new MediaPlaybackItem(media.Stream == null ? MediaSource.CreateFromUri(new Uri(media.URL)) : MediaSource.CreateFromStream(media.Stream?.AsRandomAccessStream(),string.Empty));
+        Pause();
+
+        var mediaItem = new MediaPlaybackItem(media.Stream == null ? MediaSource.CreateFromUri(new Uri(media.URL)) : MediaSource.CreateFromStream(media.Stream?.AsRandomAccessStream(), string.Empty));
         var props = mediaItem.GetDisplayProperties();
         props.Type = MediaPlaybackType.Music;
         if (media.Name != null) props.MusicProperties.Title = media.Name;
@@ -77,43 +77,49 @@ public class NativeAudioService : INativeAudioService
         if (media.Image != null)
             props.Thumbnail = RandomAccessStreamReference.CreateFromUri(new Uri(media.Image));
         mediaItem.ApplyDisplayProperties(props);
-        return mediaItem;
+        MediaPlayer.Source = mediaItem;
     }
-    public async Task InitializeAsync(MediaContent media)
+
+    public override void Next()
     {
-        if (mediaPlayer == null)
+        if (MediaNext != null)
         {
-            mediaPlayer = new MediaPlayer
-            {
-                Source = mediaPlaybackItem(media),
-                AudioCategory = MediaPlayerAudioCategory.Media
-            };
-            mediaPlayer.CommandManager.PreviousReceived += CommandManager_PreviousReceived;
-            mediaPlayer.CommandManager.NextReceived += CommandManager_NextReceived;
-            mediaPlayer.CommandManager.PauseReceived += CommandManager_PauseReceived;
-            mediaPlayer.MediaEnded += MediaPlayer_MediaEnded;
-        }
-        else
-        {
-            await PauseAsync();
-            mediaPlayer.Source = mediaPlaybackItem(media);
+            MediaCurrent = MediaNext;
+            PlayNew(MediaCurrent);
+            OnNextMediaAccepted(MediaCurrent);
         }
     }
-    private void MediaPlayer_MediaEnded(MediaPlayer sender, object args)
+    public override void Pause()
     {
-        PlayEnded?.Invoke(sender, EventArgs.Empty);
-        PlayNext?.Invoke(sender, EventArgs.Empty);
+        MediaPlayer.Pause();
+        OnPlayingPaused(null);
     }
-    private void CommandManager_NextReceived(MediaPlaybackCommandManager sender, MediaPlaybackCommandManagerNextReceivedEventArgs args)
+    public override void Play()
     {
-        PlayNext?.Invoke(sender, EventArgs.Empty);
-    }
-    private void CommandManager_PreviousReceived(MediaPlaybackCommandManager sender, MediaPlaybackCommandManagerPreviousReceivedEventArgs args)
+        MediaPlayer.Play();
+        OnPlayingStarted(null);
+    } 
+    public override void Stop()
     {
-        PlayPrevious?.Invoke(sender, EventArgs.Empty);
+        MediaPlayer.Pause();
+        MediaPlayer.Position = TimeSpan.Zero;
+        OnPlayingEnded(null);
     }
-    private void CommandManager_PauseReceived(MediaPlaybackCommandManager sender, MediaPlaybackCommandManagerPauseReceivedEventArgs args)
+    public override void Previous()
     {
-        IsPlayingChanged?.Invoke(sender, IsPlaying);
+        if (MediaPrevious != null)
+        {
+            MediaCurrent = MediaPrevious;
+            PlayNew(MediaCurrent);
+            OnPreviousMediaAccepted(MediaCurrent);
+        }
     }
+    public override void SeekTo(TimeSpan position) => MediaPlayer.Position = position;
+
+
+    private protected override void SetMediaCurrent(MediaContent value) { }
+    private protected override void SetMediaNext(MediaContent value) { }
+    private protected override void SetMediaPrevious(MediaContent value) { }
+
+    public override void Dispose() => MediaPlayer?.Dispose();
 }
