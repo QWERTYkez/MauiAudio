@@ -5,7 +5,7 @@ using Windows.Storage.Streams;
 
 namespace MauiAudio;
 
-public class NativeAudioService : NativeAudioServiceBase
+internal class NativeAudioService : NativeAudioServiceBase
 {
     MediaPlayer MediaPlayer;
 

@@ -10,7 +10,7 @@ using AndroidMedia = Android.Media;
 
 namespace MauiAudio.Platforms.Android;
 
-public static class NotificationHelper
+internal static class NotificationHelper
 {
     public static readonly string CHANNEL_ID = "location_notification";
     private const int NotificationId = 1000;

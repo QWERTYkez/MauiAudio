@@ -1,13 +1,12 @@
-﻿namespace MauiAudio.Platforms.Android.CurrentActivity
+﻿namespace MauiAudio.Platforms.Android.CurrentActivity;
+
+internal enum ActivityEvent
 {
-    public enum ActivityEvent
-    {
-        Created,
-        Resumed,
-        Paused,
-        Destroyed,
-        SaveInstanceState,
-        Started,
-        Stopped
-    }
+    Created,
+    Resumed,
+    Paused,
+    Destroyed,
+    SaveInstanceState,
+    Started,
+    Stopped
 }

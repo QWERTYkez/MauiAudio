@@ -1,33 +1,32 @@
 ﻿using Android.Content;
 using Android.OS;
 
-namespace MauiAudio.Platforms.Android
+namespace MauiAudio.Platforms.Android;
+
+internal class MediaPlayerServiceConnection : Java.Lang.Object, IServiceConnection
 {
-    public class MediaPlayerServiceConnection : Java.Lang.Object, IServiceConnection
+    readonly IAudioActivity instance;
+
+    public MediaPlayerServiceConnection(IAudioActivity mediaPlayer)
     {
-        readonly IAudioActivity instance;
+        this.instance = mediaPlayer;
+    }
 
-        public MediaPlayerServiceConnection(IAudioActivity mediaPlayer)
+    public void OnServiceConnected(ComponentName name, IBinder service)
+    {
+        if (service is MediaPlayerServiceBinder binder)
         {
-            this.instance = mediaPlayer;
-        }
+            instance.Binder = binder;
 
-        public void OnServiceConnected(ComponentName name, IBinder service)
-        {
-            if (service is MediaPlayerServiceBinder binder)
-            {
-                instance.Binder = binder;
-
-                var mediaPlayerService = binder.GetMediaPlayerService();
-                //mediaPlayerService.CoverReloaded += (object sender, EventArgs e) => { instance.CoverReloaded?.Invoke(sender, e); };
-                //mediaPlayerService.StatusChanged += (object sender, EventArgs e) => { instance.StatusChanged?.Invoke(sender, e); };
-                //mediaPlayerService.Playing += (object sender, EventArgs e) => { instance.Playing?.Invoke(sender, e); };
-                //mediaPlayerService.Buffering += (object sender, EventArgs e) => { instance.Buffering?.Invoke(sender, e); };
-            }
+            var mediaPlayerService = binder.GetMediaPlayerService();
+            //mediaPlayerService.CoverReloaded += (object sender, EventArgs e) => { instance.CoverReloaded?.Invoke(sender, e); };
+            //mediaPlayerService.StatusChanged += (object sender, EventArgs e) => { instance.StatusChanged?.Invoke(sender, e); };
+            //mediaPlayerService.Playing += (object sender, EventArgs e) => { instance.Playing?.Invoke(sender, e); };
+            //mediaPlayerService.Buffering += (object sender, EventArgs e) => { instance.Buffering?.Invoke(sender, e); };
         }
+    }
 
-        public void OnServiceDisconnected(ComponentName name)
-        {
-        }
+    public void OnServiceDisconnected(ComponentName name)
+    {
     }
 }

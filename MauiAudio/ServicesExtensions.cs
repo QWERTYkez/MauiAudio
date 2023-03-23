@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace MauiAudio;
 
-namespace MauiAudio;
-
-public static class AppBuilderExtensions
+public static class Extensions
 {
     public static MauiAppBuilder UseMauiAudio(this MauiAppBuilder builder)
     {
@@ -15,4 +9,7 @@ public static class AppBuilderExtensions
 #endif
         return builder;
     }
+
+    public static INativeAudioService GetMauiAudioService(this VisualElement element) =>
+        element.Handler.MauiContext.Services.GetService<INativeAudioService>();
 }

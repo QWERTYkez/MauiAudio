@@ -3,7 +3,7 @@ using Foundation;
 
 namespace MauiAudio;
 
-public class NativeAudioService : NativeAudioServiceBase
+internal class NativeAudioService : NativeAudioServiceBase
 {
     AVAudioPlayer AVplayer;
 

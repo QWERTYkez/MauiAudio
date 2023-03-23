@@ -6,7 +6,7 @@ namespace MauiAudio.Platforms.Android;
 
 [BroadcastReceiver(Exported = true)]
 [IntentFilter(new[] { Intent.ActionMediaButton })]
-public class RemoteControlBroadcastReceiver : BroadcastReceiver
+internal class RemoteControlBroadcastReceiver : BroadcastReceiver
 {
 
     /// <summary>

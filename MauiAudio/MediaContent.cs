@@ -1,18 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace MauiAudio;
 
-namespace MauiAudio
+public class MediaContent
 {
-    public class MediaContent
+    public MediaContent() { }
+    public MediaContent(string url)
     {
-        public virtual string Name { get; private set; }
-        public virtual string Author { get; private set; }
-        public virtual string URL { get; private set; }
-        public virtual Stream Stream { get; private set; }
-        public virtual string Image { get; private set; }
-        internal int index { get; set; }
+        URL = url;
     }
+
+    public virtual string Name { get; private protected set; }
+    public virtual string Author { get; private protected set; }
+    public virtual string URL { get; private protected set; }
+    public virtual Stream Stream { get; private protected set; }
+    public virtual string Image { get; private protected set; }
+    internal int index { get; set; }
 }

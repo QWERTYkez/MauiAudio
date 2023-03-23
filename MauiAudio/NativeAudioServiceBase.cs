@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace MauiAudio;
 
-public abstract class NativeAudioServiceBase : INativeAudioService
+internal abstract class NativeAudioServiceBase : INativeAudioService
 {
     public event PropertyChangedEventHandler PropertyChanged;
     public void OnPropertyChanged([CallerMemberName] string prop = "")

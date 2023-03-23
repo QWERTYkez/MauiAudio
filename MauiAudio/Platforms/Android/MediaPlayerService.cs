@@ -10,10 +10,9 @@ using AndroidNet = Android.Net;
 
 namespace MauiAudio.Platforms.Android;
 
-
 [Service(Exported = true)]
 [IntentFilter(new[] { ActionPlay, ActionPause, ActionStop, ActionTogglePlayback, ActionNext, ActionPrevious })]
-public class MediaPlayerService : Service,
+internal class MediaPlayerService : Service,
    AudioManager.IOnAudioFocusChangeListener,
    MediaPlayer.IOnBufferingUpdateListener,
    MediaPlayer.IOnCompletionListener,
@@ -790,7 +789,7 @@ public class MediaPlayerService : Service,
     }
 }
 
-public class MediaPlayerServiceBinder : Binder
+internal class MediaPlayerServiceBinder : Binder
 {
     private readonly MediaPlayerService service;
 

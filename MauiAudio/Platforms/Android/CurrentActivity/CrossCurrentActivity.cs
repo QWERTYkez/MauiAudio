@@ -1,43 +1,36 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace MauiAudio.Platforms.Android.CurrentActivity;
 
-namespace MauiAudio.Platforms.Android.CurrentActivity
+internal class CrossCurrentActivity
 {
-    public class CrossCurrentActivity
+    static Lazy<ICurrentActivity> implementation = new Lazy<ICurrentActivity>(() => CreateCurrentActivity(), System.Threading.LazyThreadSafetyMode.PublicationOnly);
+
+    /// <summary>
+    /// Current settings to use
+    /// </summary>
+    public static ICurrentActivity Current
     {
-        static Lazy<ICurrentActivity> implementation = new Lazy<ICurrentActivity>(() => CreateCurrentActivity(), System.Threading.LazyThreadSafetyMode.PublicationOnly);
-
-        /// <summary>
-        /// Current settings to use
-        /// </summary>
-        public static ICurrentActivity Current
+        get
         {
-            get
+            var ret = implementation.Value;
+            if (ret == null)
             {
-                var ret = implementation.Value;
-                if (ret == null)
-                {
-                    throw NotImplementedInReferenceAssembly();
-                }
-                return ret;
+                throw NotImplementedInReferenceAssembly();
             }
+            return ret;
         }
+    }
 
-        static ICurrentActivity CreateCurrentActivity()
-        {
+    static ICurrentActivity CreateCurrentActivity()
+    {
 #if NETSTANDARD1_0 || NETSTANDARD2_0
-            return null;
+        return null;
 #else
-            return new CurrentActivityImplementation();
+        return new CurrentActivityImplementation();
 #endif
-        }
+    }
 
-        internal static Exception NotImplementedInReferenceAssembly()
-        {
-            return new NotImplementedException("This functionality is not implemented in the portable version of this assembly.  You should reference the NuGet package from your main application project in order to reference the platform-specific implementation.");
-        }
+    internal static Exception NotImplementedInReferenceAssembly()
+    {
+        return new NotImplementedException("This functionality is not implemented in the portable version of this assembly.  You should reference the NuGet package from your main application project in order to reference the platform-specific implementation.");
     }
 }
