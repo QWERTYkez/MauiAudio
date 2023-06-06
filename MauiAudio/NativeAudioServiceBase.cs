@@ -245,13 +245,24 @@ internal abstract class NativeAudioServiceBase : INativeAudioService
             return;
         }
 
-        int num = Playlist.IndexOf(MediaCurrent);
-        int index1 = num - 1;
-        if (index1 < 0)
-            index1 = 0;
-        int index2 = num + 1;
-        if (index2 == Playlist.Count)
-            index2 = Playlist.Count - 1;
+        int index1;
+        int index2 = index1 = Playlist.IndexOf(MediaCurrent);
+
+        do
+        {
+            index1--;
+            if (index1 < 0)
+                index1 = 0;
+        }
+        while (!Playlist[index1].Playable);
+        do
+        {
+            index2++;
+            if (index2 == Playlist.Count)
+                index2 = Playlist.Count - 1;
+        }
+        while (!Playlist[index2].Playable);
+
         MediaPrevious = Playlist[index1];
         MediaNext = Playlist[index2];
     }
